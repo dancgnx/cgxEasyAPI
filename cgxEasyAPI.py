@@ -61,6 +61,9 @@ class cgxEasyAPI:
         :param type: str - 10.0.0.0/24
         :param opt_def_name: Option defenition. In the following option "option my_43 code 43 = text" the definiton name is "my_43"   
         :param type: str - my_43
+        :return: Success, ErrMSG
+        :rtype Success: Boolean
+        :rtype ErrMSG: String
         """
         # shortcut
         sdk = self.sdk
@@ -108,6 +111,9 @@ class cgxEasyAPI:
         :param type: str - option my_43 code 43 = text
         :param opt_val: Option value
         :param type: str - option my_43 "as"
+        :return: Success, ErrMSG
+        :rtype Success: Boolean
+        :rtype ErrMSG: String
         """
         # shortcut
         sdk = self.sdk
@@ -181,6 +187,54 @@ class cgxEasyAPI:
             if self.debug:
                 jd_detailed(res)
             return False, err
+
+        return True, ""
+
+    def interface_tag_add(self, element_name, interface_name, tag):
+        """Add tag to an interface
+        :param element_name: The name of the ION device
+        :type element_name: str
+        :param interface_name: The name of the interface to add DHCP relay to
+        :type interafce_name: str
+        :param tag: tag to add
+        :type tag: str - "prisma_region:us-west1:1"
+        :return: Success, ErrMSG
+        :rtype Success: Boolean
+        :rtype ErrMSG: String
+        """
+        # shortcut
+        sdk = self.sdk
+
+        # get ION from cache and get interface list
+        element = db.fetch("name2element", element_name)
+        if not element:
+            return False, "Can't find element"
+        interfaces = self.get_interfaces(element['site_id'], element['id'])
+
+        # find interface name 
+        for interface in interfaces:
+            if interface['name'] == interface_name:
+                break
+        else:
+            return False, "Can't find interface"
+        
+        if interface['tags'] == None:
+            interface['tags'] = []
+
+        if tag in interface['tags']:
+            return False, "tag already exists"
+        
+        interface['tags'].append(tag)
+        res = sdk.put.interfaces(element['site_id'], element['id'], interface['id'], interface)
+        if not res:
+            err = f"--- Can't add tag: {sdk.pull_content_error(res)}"
+            log.error(err)
+            if self.debug:
+                jd_detailed(res)
+            return False, err
+
+        # refresh interfaces for the elemnt as we changed an attribute
+        self.build_interfaces_cache(element['site_id'], element['id'])
 
         return True, ""
 
@@ -283,7 +337,9 @@ if __name__ == "__main__":
     res, err = False, "Test"
     #res, err= easy.interface_dhcprelay_add("Dan 2k", "3", "10.2.3.4", source_interface_name = "2")
     #res, err = easy.dhcp_pool_add_option("Dan Home", "1.2.3.0/24", "", "option my_44 code 44 = text", 'option my_44 "as"')
-    res, err = easy.dhcp_pool_del_option("Dan Home", "1.2.3.0/24", "my_44")
+    #res, err = easy.dhcp_pool_del_option("Dan Home", "1.2.3.0/24", "my_44")
+    res, err = easy.interface_tag_add("Dan 2k", "1", "kokoloko")
     print(res, err)
     #res, err= easy.interface_dhcprelay_add("Dan 2k", "3", "10.2.3.5")
+    res, err = easy.interface_tag_add("Dan 2k", "1", "kokoloko")
     print(res, err)
