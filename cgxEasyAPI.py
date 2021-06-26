@@ -52,6 +52,50 @@ class cgxEasyAPI:
             self.build_interfaces_cache(site_id, element_id)
         
         return interfaces[element_id]
+
+    def dhcp_pool_del_option(self, site_name, subnet, opt_def_name):
+        """Add dhcp pool option
+        :param site_name: The site to add the option to.
+        :param type: str
+        :param subnet: IPv4 subnet. This will be used to indetify
+        :param type: str - 10.0.0.0/24
+        :param opt_def_name: Option defenition. In the following option "option my_43 code 43 = text" the definiton name is "my_43"   
+        :param type: str - my_43
+        """
+        # shortcut
+        sdk = self.sdk
+
+        # get site info
+        site = db.fetch("name2site", site_name)
+        if not site:
+            return False, "Site not found"
+
+        # find the dhcp scoped
+        for dhcpserver in sdk.get.dhcpservers(site['id']).cgx_content['items']:
+            if dhcpserver['subnet'] == subnet:
+                break 
+        else:
+            return False, "DHCP subnet not found"
+        
+        # find the options
+        for option in dhcpserver['custom_options']:
+            if f"option {opt_def_name} code" in option['option_definition']:
+                break
+        else:
+            return False, "Option not found"
+
+        # remove the option
+        dhcpserver['custom_options'].remove(option)
+        res = sdk.put.dhcpservers(site['id'], dhcpserver['id'], dhcpserver)
+        if not res:
+            err = f"--- Can't remove DHCP option: {sdk.pull_content_error(res)}"
+            log.error(err)
+            if self.debug:
+                jd_detailed(res)
+            return False, err
+
+        return True, ""
+
     def dhcp_pool_add_option(self, site_name, subnet, opt_vci, opt_def, opt_val):
         """Add dhcp pool option
         :param site_name: The site to add the option to.
@@ -239,6 +283,7 @@ if __name__ == "__main__":
     res, err = False, "Test"
     #res, err= easy.interface_dhcprelay_add("Dan 2k", "3", "10.2.3.4", source_interface_name = "2")
     #res, err = easy.dhcp_pool_add_option("Dan Home", "1.2.3.0/24", "", "option my_44 code 44 = text", 'option my_44 "as"')
+    res, err = easy.dhcp_pool_del_option("Dan Home", "1.2.3.0/24", "my_44")
     print(res, err)
     #res, err= easy.interface_dhcprelay_add("Dan 2k", "3", "10.2.3.5")
     print(res, err)
