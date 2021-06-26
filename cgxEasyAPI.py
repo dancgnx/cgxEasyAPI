@@ -52,6 +52,57 @@ class cgxEasyAPI:
             self.build_interfaces_cache(site_id, element_id)
         
         return interfaces[element_id]
+    def dhcp_pool_add_option(self, site_name, subnet, opt_vci, opt_def, opt_val):
+        """Add dhcp pool option
+        :param site_name: The site to add the option to.
+        :param type: str
+        :param subnet: IPv4 subnet. This will be used to indetify
+        :param type: str - 10.0.0.0/24
+        :param opt_vci: vendor class indetifier
+        :param type: str
+        :param opt_def: Option defenition
+        :param type: str - option my_43 code 43 = text
+        :param opt_val: Option value
+        :param type: str - option my_43 "as"
+        """
+        # shortcut
+        sdk = self.sdk
+
+        # get site info
+        site = db.fetch("name2site", site_name)
+        if not site:
+            return False, "Site not found"
+
+        # find the dhcp scoped
+        for dhcpserver in sdk.get.dhcpservers(site['id']).cgx_content['items']:
+            if dhcpserver['subnet'] == subnet:
+                break 
+        else:
+            return False, "DHCP subnet not found"
+        
+        # if not options alread configure, create an empty list
+        if not dhcpserver['custom_options']:
+            dhcpserver['custom_options'] = []
+        
+        # add option 
+        dhcpserver['custom_options'].append(
+            {
+                "vendor_class_identifier" : opt_vci,
+                "option_definition": opt_def,
+                "option_value": opt_val
+            }
+        )
+
+        res = sdk.put.dhcpservers(site['id'], dhcpserver['id'], dhcpserver)
+        if not res:
+            err = f"--- Can't add DHCP option: {sdk.pull_content_error(res)}"
+            log.error(err)
+            if self.debug:
+                jd_detailed(res)
+            return False, err
+
+        return True, ""
+        
     def dhcp_pool_delete(self, site_name, subnet):
         """Delete DHCP pool
         :param site_name: the site name from where to delete the DHCP pool
@@ -89,7 +140,7 @@ class cgxEasyAPI:
 
         return True, ""
 
-    def interface_dhcprelay_add(self, element_name, interface_name, dhcprelay_ip):
+    def interface_dhcprelay_add(self, element_name, interface_name, dhcprelay_ip, source_interface_name=None):
         """Add DHCP relay server to an interface
         :param element_name: The name of the ION device
         :type element_name: str
@@ -97,6 +148,8 @@ class cgxEasyAPI:
         :type interafce_name: str
         :param dhcprelay_ip: DHCP server IP address to add
         :type dcprelay_ip: str in IP address format, without mask
+        :param source_interface_name: The name of the interface to source the DHCP requests. If None, the source interface would be the interface itself.
+        :type source_interafce_name: str
         :return: Success, ErrMSG
         :rtype Success: Boolean
         :rtype ErrMSG: String
@@ -117,10 +170,22 @@ class cgxEasyAPI:
         else:
             return False, "Can't find interface"
         
+        # find source_interface
+        if source_interface_name:
+            for source_interface in interfaces:
+                if source_interface['name'] == source_interface_name:
+                    break
+            else:
+                return False, "Can't find source interface name"
+        else:
+            source_interface = None
+
+        
         # if DHCP server list is empty, create new entry if not, add the server to the list
         if interface['dhcp_relay']:
             interface['dhcp_relay']['server_ips'] = list(set(interface['dhcp_relay']['server_ips']+[dhcprelay_ip]))
         else:
+            source_interface_id = interface['id'] if not source_interface else source_interface['id']
             interface['dhcp_relay']= {
                 "server_ips": [
                     dhcprelay_ip
@@ -132,7 +197,7 @@ class cgxEasyAPI:
                     "remote_id": None,
                     "reforwarding_policy": "replace"
                 },
-                "source_interface": interface['id']
+                "source_interface": source_interface_id
             }
         
         # update the interface
@@ -171,7 +236,9 @@ if __name__ == "__main__":
 
     #delete dhcp 
     easy = cgxEasyAPI(sdk, debug=1)
-    res, err= easy.interface_dhcprelay_add("Dan 2k", "3", "10.2.3.4")
+    res, err = False, "Test"
+    #res, err= easy.interface_dhcprelay_add("Dan 2k", "3", "10.2.3.4", source_interface_name = "2")
+    #res, err = easy.dhcp_pool_add_option("Dan Home", "1.2.3.0/24", "", "option my_44 code 44 = text", 'option my_44 "as"')
     print(res, err)
-    res, err= easy.interface_dhcprelay_add("Dan 2k", "3", "10.2.3.5")
+    #res, err= easy.interface_dhcprelay_add("Dan 2k", "3", "10.2.3.5")
     print(res, err)
