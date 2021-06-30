@@ -16,6 +16,7 @@ class cgxEasyAPI:
         self.sdk = sdk
         self.debug = debug
         self.interfaces = {} # interface cache
+        db.init(sdk)
     
     def build_interfaces_cache(self, site_id, element_id):
         """Build interfaces cache 
@@ -357,8 +358,6 @@ class cgxEasyAPI:
 
         return True, ""
 
-                    
-
     def interface_dhcprelay_add(self, element_name, interface_name, dhcprelay_ip, source_interface_name=None):
         """Add DHCP relay server to an interface
         :param element_name: The name of the ION device
@@ -432,7 +431,125 @@ class cgxEasyAPI:
         self.build_interfaces_cache(element['site_id'], element['id'])
 
         return True, ""
+    def set_snmpv3_agent(self, element_name, user_name, security_level, engine_id, auth_phrase, auth_type, enc_phrase, enc_type):
+        """ update or create SNMPv3 agent
+        :param element_name: the device to set snmpv3 agent for
+        :ptype element_name: str
+        :param user_name: SNMPv3 username. This will be the primary key for searchign for existing configuration
+        :ptype element_name: str
+        :param security_level: What security level for SNMPv3. can be 'noauth', 'auth' or 'private'
+        :ptype security_level: str
+        :param engine_id: SNMP engine ID. Must be even number of hex digits
+        :ptype engine_id: hex string
+        :param auth_phrase: auth password
+        :ptype auth_phrase: str
+        :param auth_type: Authentication type. Can be "md5" or "sha" or "none"
+        :ptype auth_type: str
+        :param enc_phrase: necryption password
+        :ptype enc_phrase: str
+        :param enc_type: encryption type. Can be "des" or "aes" or "none
+        :ptype enc_type: str
+        :return: Success, ErrMSG
+        :rtype Success: Boolean
+        :rtype ErrMSG: String
+        """
+        # shortcut
+        sdk = self.sdk
 
+        # get ION from cache and get interface list
+        element = db.fetch("name2element", element_name)
+        if not element:
+            return False, "Can't find element"
+        
+        # get existing SNMP configuration
+        snmpagents = sdk.get.snmpagents(element['site_id'], element['id']).cgx_content['items']
+
+        # if no configuration found, create a new one
+        if snmpagents == []:
+            log.info("--- No SNMP agents found. Creating a new one")
+            snmpagent = {
+                "tags": None,
+                "description": None,
+                "v2_config": {
+                    "enabled": False,
+                    "community": None
+                },
+                "v3_config": {
+                    "enabled": True,
+                    "users_access": [{
+                        "user_name": user_name, 
+                        "engine_id": engine_id,
+                        "security_level": security_level,
+                        "auth_type": auth_type,
+                        "auth_phrase": auth_phrase,
+                        "enc_type": enc_type,
+                        "enc_phrase": enc_phrase
+                    }]
+                }
+            }
+
+            res = sdk.post.snmpagents(element['site_id'], element['id'],snmpagent)
+            if not res:
+                err = f"--- Can't create SNMP agent: {sdk.pull_content_error(res)}"
+                log.error(err)
+                if self.debug:
+                    jd_detailed(res)
+                return False, err
+            return True, ""
+        
+        snmpagent = snmpagents[0]
+        # check if there are any entries 
+        if not snmpagent['v3_config']:
+            log.info("--- Creating SNMPv3")
+            snmpagent['v3_config'] = {
+                "enabled": True,
+                "users_access": [
+                    {
+                        "user_name": user_name, 
+                        "engine_id": engine_id,
+                        "security_level": security_level,
+                        "auth_type": auth_type,
+                        "auth_phrase": auth_phrase,
+                        "enc_type": enc_type,
+                        "enc_phrase": enc_phrase
+                    }
+                ]
+            }
+        else:
+            # search if username already configured
+            for user in snmpagent['v3_config']['users_access']:
+                if user['user_name'] == user_name:
+                    log.info("--- Username found. Updating existing user")
+                    user["engine_id"]= engine_id
+                    user["security_level"]= security_level
+                    user["auth_type"]= auth_type
+                    user["auth_phrase"]= auth_phrase
+                    user["enc_type"]= enc_type
+                    user["enc_phrase"]= enc_phrase
+                    break
+            else:
+                # user not found. add it to the list
+                log.info("--- Username not found. Creating new entry")
+                snmpagent['v3_config']['users_access'].append({
+                        "user_name": user_name, 
+                        "engine_id": engine_id,
+                        "security_level": security_level,
+                        "auth_type": auth_type,
+                        "auth_phrase": auth_phrase,
+                        "enc_type": enc_type,
+                        "enc_phrase": enc_phrase
+                })
+        
+        # update SNMP agent 
+        res = sdk.put.snmpagents(element['site_id'], element['id'],snmpagent['id'], snmpagent)
+        if not res:
+            err = f"--- Can't update SNMP agent: {sdk.pull_content_error(res)}"
+            log.error(err)
+            if self.debug:
+                jd_detailed(res)
+            return False, err
+
+        return True, ""
 if __name__ == "__main__":
     # init logging
     cloudgenix.api_logger.setLevel(logging.WARN)
@@ -451,7 +568,7 @@ if __name__ == "__main__":
         sys.exit()
     
     #init db
-    db.init(sdk)
+    #db.init(sdk)
 
     #delete dhcp 
     easy = cgxEasyAPI(sdk, debug=1)
@@ -459,8 +576,9 @@ if __name__ == "__main__":
     #res, err= easy.interface_dhcprelay_add("Dan 2k", "3", "10.2.3.4", source_interface_name = "2")
     #res, err = easy.dhcp_pool_add_option("Dan Home", "1.2.3.0/24", "", "option my_44 code 44 = text", 'option my_44 "as"')
     #res, err = easy.dhcp_pool_del_option("Dan Home", "1.2.3.0/24", "my_44")
-    res, err = easy.set_interface_zone("Dan 2k",'3','Internet')
+    res, err = easy.set_snmpv3_agent("Dan 2k", "dantest", "auth", "12423423423422", "kokoloko", "sha", None, "none")
     print(res, err)
-    res, err = easy.set_interface_zone("Dan 2k",'1','Vendor')
-    #res, err= easy.interface_dhcprelay_add("Dan 2k", "3", "10.2.3.5")
+    res, err = easy.set_snmpv3_agent("Dan 2k", "dantest", "auth", "12423423423422", "kokoroko", "sha", None, "none")
+    print(res, err)
+    res, err = easy.set_snmpv3_agent("Ansh-Hub", "uSNMP", "auth", "12423423423422", "kokoroko", "sha", None, "none")
     print(res, err)
