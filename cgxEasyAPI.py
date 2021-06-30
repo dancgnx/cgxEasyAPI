@@ -238,6 +238,127 @@ class cgxEasyAPI:
 
         return True, ""
 
+    def set_interface_zone(self, element_name, interface_name, zone_name):
+        """ Place an interface into a zone. 
+        If an interface is already in a zone, th escript will pull it out of that zone
+        :param element_name: The name of the ION device
+        :type element_name: str
+        :param interface_name: The name of the interface to add DHCP relay to
+        :type interafce_name: str
+        :param zone_name: The name of the zone to attach the interface to
+        :type zone_name: str
+        :return: Success, ErrMSG
+        :rtype Success: Boolean
+        :rtype ErrMSG: String
+        """
+        # shortcut
+        sdk = self.sdk
+
+        # get ION from cache and get interface list
+        element = db.fetch("name2element", element_name)
+        if not element:
+            return False, "Can't find element"
+        interfaces = self.get_interfaces(element['site_id'], element['id'])
+
+        # find interface name 
+        for interface in interfaces:
+            if interface['name'] == interface_name:
+                break
+        else:
+            return False, "Can't find interface"
+
+        # create a security zone database
+        securityzones = sdk.get.securityzones().cgx_content['items']
+        name2zone = {}
+        zone2name = {}
+        for securityzone in securityzones:
+            name2zone[securityzone['name']] = securityzone
+            zone2name[securityzone['id']] = securityzone
+        
+        if zone_name not in name2zone:
+            return False, f"Can't find zone {zone_name}"
+        else:
+            zone = name2zone[zone_name]
+        
+        # check if interface already assign into a zone
+        zone_bindings  = sdk.get.elementsecurityzones(element['site_id'], element['id']).cgx_content['items']
+        for zone_binding in zone_bindings:
+            if zone_binding['zone_id'] == zone['id']:
+                continue
+            if zone_binding['interface_ids'] and interface['id'] in zone_binding['interface_ids']:
+                log.info(f"--- Interface found in zone {zone2name[zone_binding['zone_id']]['name']}")
+                # remove the interface and update the zone binding
+                zone_binding['interface_ids'].remove(interface['id'])
+                if zone_binding['interface_ids'] == []:
+                    zone_binding['interface_ids'] = None
+                # scan through all the bindings for the zone, if all are empty then delete otherwise update
+                if zone_binding['interface_ids'] == None and \
+                    zone_binding['lannetwork_ids'] == None and\
+                    zone_binding['waninterface_ids'] == None and\
+                    zone_binding['wanoverlay_ids'] == None:
+                    # delete zone_binding
+                    log.info(f"--- After removing interface from zone {zone2name[zone_binding['zone_id']]['name']} there are no binding left. Deleting the binding")
+                    res = sdk.delete.elementsecurityzones(element['site_id'], element['id'], zone_binding['id'])
+                    if not res:
+                        err = f"--- Can't delete zone binding {zone2name[zone_binding['zone_id']]['name']}: {sdk.pull_content_error(res)}"
+                        log.error(err)
+                        if self.debug:
+                            jd_detailed(res)
+                        return False, err
+                else:
+                    # update the zone_binding
+                    log.info(f"--- Removing interface from zone {zone2name[zone_binding['zone_id']]['name']}")
+                    res = sdk.put.elementsecurityzones(element['site_id'], element['id'], zone_binding['id'], zone_binding)
+                    if not res:
+                        err = f"--- Can't update zone binding for {zone2name[zone_binding['zone_id']]['name']}: {sdk.pull_content_error(res)}"
+                        log.error(err)
+                        if self.debug:
+                            jd_detailed(res)
+                        return False, err
+
+        # find existing zone bindings. If found, just add the interface and update, else create a new zone binding
+        for zone_binding in zone_bindings:
+            if zone['id'] == zone_binding['zone_id']:
+                # create a list of noze bindings is not there
+                if not zone_binding['interface_ids']:
+                    zone_binding['interface_ids'] = [interface['id']]
+                else:
+                    # check if interface already there
+                    if interface['id'] in zone_binding['interface_ids']:
+                        log.info(f"--- Interface {interface['name']} already bound to zone {zone_name}")
+                        return True, "interface already bound"
+                    zone = zone_binding['interface_ids'].append(interface['id'])
+                # update the zone_binding
+                log.info(f"--- Adding interface {interface['name']} to zone {zone_name}")
+                res = sdk.put.elementsecurityzones(element['site_id'], element['id'], zone_binding['id'], zone_binding)
+                if not res:
+                    err = f"--- Can't update zone binding for {zone_name}: {sdk.pull_content_error(res)}"
+                    log.error(err)
+                    if self.debug:
+                        jd_detailed(res)
+                    return False, err
+                break
+        else:
+            # create a new zone binding and post
+            log.info(f"--- Creating zone binding with interface {interface['name']} bound to zone {zone_name}")
+            zone_binding = {
+                "zone_id": zone['id'],
+                "lannetwork_ids": [],
+                "interface_ids": [interface['id']],
+                "wanoverlay_ids": [],"waninterface_ids": []
+            }
+            res = sdk.post.elementsecurityzones(element['site_id'], element['id'], zone_binding)
+            if not res:
+                err = f"--- Can't create zone bindings for {zone_name}: {sdk.pull_content_error(res)}"
+                log.error(err)
+                if self.debug:
+                    jd_detailed(res)
+                return False, err
+
+        return True, ""
+
+                    
+
     def interface_dhcprelay_add(self, element_name, interface_name, dhcprelay_ip, source_interface_name=None):
         """Add DHCP relay server to an interface
         :param element_name: The name of the ION device
@@ -338,8 +459,8 @@ if __name__ == "__main__":
     #res, err= easy.interface_dhcprelay_add("Dan 2k", "3", "10.2.3.4", source_interface_name = "2")
     #res, err = easy.dhcp_pool_add_option("Dan Home", "1.2.3.0/24", "", "option my_44 code 44 = text", 'option my_44 "as"')
     #res, err = easy.dhcp_pool_del_option("Dan Home", "1.2.3.0/24", "my_44")
-    res, err = easy.interface_tag_add("Dan 2k", "1", "kokoloko")
+    res, err = easy.set_interface_zone("Dan 2k",'3','Internet')
     print(res, err)
+    res, err = easy.set_interface_zone("Dan 2k",'1','Vendor')
     #res, err= easy.interface_dhcprelay_add("Dan 2k", "3", "10.2.3.5")
-    res, err = easy.interface_tag_add("Dan 2k", "1", "kokoloko")
     print(res, err)
