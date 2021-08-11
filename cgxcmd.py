@@ -28,7 +28,6 @@ class cgxcmd(cmd.Cmd):
         
         # remove spaces
         clean_line = " ".join(line.split())
-        print(clean_line)
         m = re.search(r'interface_security_zone element \"(.*)\" interface \"(.*)\" zone \"(.*)\"', clean_line)
         if m:
             element_re, interface, zone = m.groups()
