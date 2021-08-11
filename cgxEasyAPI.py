@@ -17,6 +17,14 @@ class cgxEasyAPI:
         self.debug = debug
         self.interfaces = {} # interface cache
         db.init(sdk)
+        # init logging
+        cloudgenix.api_logger.setLevel(logging.WARN)
+        logging.basicConfig(level=logging.INFO)
+        logging.getLogger("requests").setLevel(logging.WARN)
+        logging.getLogger("urllib3").setLevel(logging.WARN)
+        logging.getLogger("cgxEasyAPI").setLevel(logging.INFO)
+        global log
+        log = logging.getLogger("cgxEasyAPI")
     
     def build_interfaces_cache(self, site_id, element_id):
         """Build interfaces cache 
@@ -431,6 +439,7 @@ class cgxEasyAPI:
         self.build_interfaces_cache(element['site_id'], element['id'])
 
         return True, ""
+
     def set_snmpv3_agent(self, element_name, user_name, security_level, engine_id, auth_phrase, auth_type, enc_phrase, enc_type):
         """ update or create SNMPv3 agent
         :param element_name: the device to set snmpv3 agent for

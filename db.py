@@ -1,4 +1,5 @@
 # object database
+import re
 
 sdk = None
 def init(sdk_in):
@@ -28,14 +29,32 @@ def init_db(db_name):
             db['name2element'][element['name']] = element
 
 def fetch(db_name, db_key):
-    """ extract site object by id
-    :param site_id: Cloudgenix sites object id
-    :type site_id: str
-    :returns: Cloudgenix site object
+    """ extract object by key
+    :param db_name: The database name
+    :type db_name: str
+    :param db_key: The key to search for
+    :type db_key: str
+    :returns: object
     :rtype: dictionary
     """
     # if tranlatio db is empty, build it
     if not db[db_name]:
         init_db(db_name)
     return db[db_name].get(db_key, None)
+def get_re(db_name, db_re):
+    """ get a list of object by re on the key
+    :param db_name: Cloudgenix sites object id
+    :type db_name: str
+    :param db_re: regular expression to search
+    :type db_re: str - re format
+    :returns: mathcing objects
+    :rtype: list of dictionary
+    """ 
+    if not db[db_name]:
+        init_db(db_name)
+
+    return [
+        value for key, value in db[db_name].items() 
+        if key and re.search(db_re, key)
+    ]
     
