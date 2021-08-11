@@ -16,10 +16,38 @@ class cgxcmd(cmd.Cmd):
     SET_COMMANDS = ["interface_security_zone", "snmpv3_agent", ]
     ADD_COMMANDS = ["dhcp_pool_option", "interface_tag", "interface_dhcp_relay"]
     DELETE_COMMANDS = ['dhcp_pool_option', "dhcp_pool"]
+    def read_file(self, file_name):
+        """Read file and return list of lines or error message
+        """
+        try:
+            with open(file_name) as f:
+                return f.readlines(), None
+        except FileNotFoundError:
+            return False, f"File {file_name} not found"
+        except PermissionError:
+            return False, f"No permission to read {file_name}"
+
     def do_exit(self, line):
         return True
     def do_EOF(self, line):
         return True
+    def do_show(self, line):
+        """ Show stuff
+        show elements "regualr expression"
+        """
+        # remove spaces
+        clean_line = " ".join(line.split())
+        m = re.search(r'elements \"(.*)\"', clean_line)
+        if m:
+            element_re = m.groups(1)[0]
+            elements = db.get_re("name2element", element_re)
+            for element in elements:
+                print(element['name'])
+
+    def do_add(self, line):
+        """ Add somethign to an object 
+        add dhcp
+        """
     def do_set(self, line):
         """change a property of an object
         set interface_security_zone element <element_name> interface <interface_name> zone <zone_name>
@@ -36,6 +64,21 @@ class cgxcmd(cmd.Cmd):
                 res, err = cgxapi.set_interface_zone(element['name'], interface, zone)
                 if not res:
                     log.error(err)
+            return
+        m = re.search(r'interface_security_zone element_file \"(.*)\" interface \"(.*)\" zone \"(.*)\"', clean_line)
+        if m:
+            element_file, interface, zone = m.groups()
+            elements, err = self.read_file(element_file)
+            pp(elements)
+            if elements == False:
+                log.error(err)
+                return
+            for element in elements:
+                res, err = cgxapi.set_interface_zone(element.strip(), interface, zone)
+                if not res:
+                    log.error(err)
+            return
+        return log.error("Command not found")
 
     def complete_set(self, text, line, begidx, endidx):
         #print(f"\n\ntext {text}\nbegindx {begidx} endidx {endidx}")
