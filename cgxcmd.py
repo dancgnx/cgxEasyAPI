@@ -46,8 +46,66 @@ class cgxcmd(cmd.Cmd):
 
     def do_add(self, line):
         """ Add somethign to an object 
-        add dhcp
+        add interface_dhcp_relay element <element name> interface <interface name> server_ip <ip address>
+        add interface_dhcp_relay element <element name> interface <interface name> server_ip <ip address> source_interface <interface name>
+        add interface_dhcp_relay element_file <element file name> interface <interface name> server_ip <ip address>
+        add interface_dhcp_relay element_file <element file name> interface <interface name> server_ip <ip address> source_interface <interface name>
         """
+
+        # clean any white spaces
+        clean_line = " ".join(line.split())
+        m = re.search(r'interface_dhcp_relay element \"([^\"]+)\" interface \"([^\"]+)\" server_ip \"([^\"]+)\"$', clean_line)
+        if m:
+            element_re, interface, server_ip = m.groups()
+            elements = db.get_re("name2element", element_re)
+            for element in elements:
+                log.info(f"Working on element {element['name']}")
+                res, err = cgxapi.interface_dhcprelay_add(element['name'], interface, server_ip)
+                if not res:
+                    log.error(err)
+            return
+
+        m = re.search(r'interface_dhcp_relay element \"([^\"]+)\" interface \"([^\"]+)\" server_ip \"([^\"]+)\" source_interface \"([^\"]+)\"$', clean_line)
+        if m:
+            element_re, interface, server_ip, source_interface = m.groups()
+            elements = db.get_re("name2element", element_re)
+            for element in elements:
+                log.info(f"Working on element {element['name']}")
+                res, err = cgxapi.interface_dhcprelay_add(element['name'], interface, server_ip, source_interface)
+                if not res:
+                    log.error(err)
+            return
+
+        m = re.search(r'interface_dhcp_relay element_file \"([^\"]+)\" interface \"([^\"]+)\" server_ip \"([^\"]+)\"$', clean_line)
+        if m:
+            element_file, interface, server_ip = m.groups()
+            elements, err = self.read_file(element_file)
+            if elements == False:
+                log.error(err)
+                return
+            for element in elements:
+                log.info(f"Working on element {element.strip()}")
+                res, err = cgxapi.interface_dhcprelay_add(element.strip(), interface, server_ip)
+                if not res:
+                    log.error(err)
+            return
+
+        m = re.search(r'interface_dhcp_relay element_file \"([^\"]+)\" interface \"([^\"]+)\" server_ip \"([^\"]+)\" source_interface \"([^\"]+)\"$', clean_line)
+        if m:
+            element_file, interface, server_ip, source_interface = m.groups()
+            elements, err = self.read_file(element_file)
+            if elements == False:
+                log.error(err)
+                return
+            for element in elements:
+                log.info(f"Working on element {element.strip()}")
+                res, err = cgxapi.interface_dhcprelay_add(element.strip(), interface, server_ip, source_interface)
+                if not res:
+                    log.error(err)
+            return
+
+        return log.error("Command not found")
+        
     def do_set(self, line):
         """change a property of an object
         set interface_security_zone element <element_name> interface <interface_name> zone <zone_name>
@@ -61,6 +119,7 @@ class cgxcmd(cmd.Cmd):
             element_re, interface, zone = m.groups()
             elements = db.get_re("name2element", element_re)
             for element in elements:
+                log.info(f"Working on element {element['name']}")
                 res, err = cgxapi.set_interface_zone(element['name'], interface, zone)
                 if not res:
                     log.error(err)
@@ -69,11 +128,11 @@ class cgxcmd(cmd.Cmd):
         if m:
             element_file, interface, zone = m.groups()
             elements, err = self.read_file(element_file)
-            pp(elements)
             if elements == False:
                 log.error(err)
                 return
             for element in elements:
+                log.info(f"Working on element {element.strip()}")
                 res, err = cgxapi.set_interface_zone(element.strip(), interface, zone)
                 if not res:
                     log.error(err)

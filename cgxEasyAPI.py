@@ -437,7 +437,7 @@ class cgxEasyAPI:
         
         # refresh interfaces for the elemnt as we changed an attribute
         self.build_interfaces_cache(element['site_id'], element['id'])
-
+        log.info("DHCP relay added")
         return True, ""
 
     def set_snmpv3_agent(self, element_name, user_name, security_level, engine_id, auth_phrase, auth_type, enc_phrase, enc_type):
