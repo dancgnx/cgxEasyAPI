@@ -16,6 +16,23 @@ class cgxcmd(cmd.Cmd):
     SET_COMMANDS = ["interface_security_zone", "snmpv3_agent", ]
     ADD_COMMANDS = ["dhcp_pool_option", "interface_tag", "interface_dhcp_relay"]
     DELETE_COMMANDS = ['dhcp_pool_option', "dhcp_pool"]
+
+    def clean_input(self, line):
+        """ Clean any leading traling spaces. Also conver \" to ♞ to be later replaced by "
+        """
+        line = " ".join(line.split()).replace('\\"',"\u265E")
+        return line
+    def replace_knight(self, *args):
+        """ Replace the ♞ sign with "
+        """
+        return [
+            arg.replace("\u265E",'"')
+            for arg in args
+        ]
+    def do_loko(self, line):
+        line = self.clean_input(line)
+        print(line)
+        print(self.replace_knight(*line.split()))
     def read_file(self, file_name):
         """Read file and return list of lines or error message
         """
@@ -46,14 +63,16 @@ class cgxcmd(cmd.Cmd):
 
     def do_add(self, line):
         """ Add somethign to an object 
+        add dhcp_pool_option site "<site name>" subnet "<subnet/mask>" opt_vci "<vci>" opt_def "<def>" opt_val "<value>"
         add interface_dhcp_relay element <element name> interface <interface name> server_ip <ip address>
         add interface_dhcp_relay element <element name> interface <interface name> server_ip <ip address> source_interface <interface name>
         add interface_dhcp_relay element_file <element file name> interface <interface name> server_ip <ip address>
         add interface_dhcp_relay element_file <element file name> interface <interface name> server_ip <ip address> source_interface <interface name>
+        add dhcp_pool_option site "<site name>" subnet "<subnet with /mask>" opt_vci "<vendor class id, can be empty>" opt_def "<opt definition>" opt_val "<opt value>"
         """
 
-        # clean any white spaces
-        clean_line = " ".join(line.split())
+        # clean any white spaces and turn \" to a knight
+        clean_line = self.clean_input(line)
         m = re.search(r'interface_dhcp_relay element \"([^\"]+)\" interface \"([^\"]+)\" server_ip \"([^\"]+)\"$', clean_line)
         if m:
             element_re, interface, server_ip = m.groups()
@@ -104,8 +123,31 @@ class cgxcmd(cmd.Cmd):
                     log.error(err)
             return
 
+        m = re.search(r'dhcp_pool_option site \"([^\"]+)\" subnet \"([^\"]+)\" opt_vci \"([^\"]*)\" opt_def \"([^\"]+)\" opt_val \"([^\"]+)\"$', clean_line)
+        if m:
+            site, subnet, opt_vci, opt_def, opt_val = self.replace_knight(*m.groups())
+            res, err = cgxapi.dhcp_pool_add_option(site, subnet, opt_vci, opt_def, opt_val)
+            if not res:
+                log.error(err)
+            return
         return log.error("Command not found")
         
+    def do_delete(self, line):
+        """Delete object
+        delete dhcp_pool_option site "<site name>" subnet "<pool subnet>" opt_def "<option name>"
+        """
+        # remove spaces
+        clean_line = self.clean_input(line)
+        
+        m = re.search(r'dhcp_pool_option site \"([^\"]+)\" subnet \"([^\"]+)\" opt_def \"([^\"]+)\"$', clean_line)
+        if m:
+            site_name, subnet, opt_def_name = self.replace_knight(*m.groups())
+            res, err = cgxapi.dhcp_pool_del_option(site_name, subnet, opt_def_name)
+            if not res:
+                log.error(err)
+            return
+        return log.error("Command not found")
+
     def do_set(self, line):
         """change a property of an object
         set interface_security_zone element <element_name> interface <interface_name> zone <zone_name>
@@ -114,6 +156,7 @@ class cgxcmd(cmd.Cmd):
         
         # remove spaces
         clean_line = " ".join(line.split())
+
         m = re.search(r'interface_security_zone element \"(.*)\" interface \"(.*)\" zone \"(.*)\"', clean_line)
         if m:
             element_re, interface, zone = m.groups()
