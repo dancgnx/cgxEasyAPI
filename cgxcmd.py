@@ -64,11 +64,13 @@ class cgxcmd(cmd.Cmd):
     def do_add(self, line):
         """ Add somethign to an object 
         add dhcp_pool_option site "<site name>" subnet "<subnet/mask>" opt_vci "<vci>" opt_def "<def>" opt_val "<value>"
-        add interface_dhcp_relay element <element name> interface <interface name> server_ip <ip address>
-        add interface_dhcp_relay element <element name> interface <interface name> server_ip <ip address> source_interface <interface name>
-        add interface_dhcp_relay element_file <element file name> interface <interface name> server_ip <ip address>
-        add interface_dhcp_relay element_file <element file name> interface <interface name> server_ip <ip address> source_interface <interface name>
+        add interface_dhcp_relay element "<element name>" interface "<interface name>" server_ip "<ip address>"
+        add interface_dhcp_relay element "<element name>" interface "<interface name>" server_ip "<ip address> source_interface <interface name>"
+        add interface_dhcp_relay element_file "<element file name>" interface "<interface name>" server_ip <ip address>"
+        add interface_dhcp_relay element_file "<element file name>" interface "<interface name>" server_ip <ip address>" source_interface <interface name>"
         add dhcp_pool_option site "<site name>" subnet "<subnet with /mask>" opt_vci "<vendor class id, can be empty>" opt_def "<opt definition>" opt_val "<opt value>"
+        add interface_tag element "<element name>" interface "<interface name>" tag "<tag>"
+        add interface_tag element_file "<element file name>" interface "<interface name>" tag "<tag>"
         """
 
         # clean any white spaces and turn \" to a knight
@@ -130,6 +132,31 @@ class cgxcmd(cmd.Cmd):
             if not res:
                 log.error(err)
             return
+
+        m = re.search(r'interface_tag element \"([^\"]+)\" interface \"([^\"]+)\" tag \"([^\"]+)\"$', clean_line)
+        if m:
+            element_re, interface, tag = self.replace_knight(*m.groups())
+            elements = db.get_re("name2element", element_re)
+            for element in elements:
+                log.info(f"Working on element {element['name']}")
+                res, err = cgxapi.interface_tag_add['name'], interface, tag)
+                if not res:
+                    log.error(err)
+            return
+
+        m = re.search(r'interface_tag element_file \"([^\"]+)\" interface \"([^\"]+)\" tag \"([^\"]+)\"$', clean_line)
+        if m:
+            element_file, interface, tag = self.replace_knight(*m.groups())
+            elements, err = self.read_file(element_file)
+            if elements == False:
+                log.error(err)
+                return
+            for element in elements:
+                log.info(f"Working on element {element.strip()}")
+                res, err = cgxapi.interface_tag_add(element.strip(), interface, tag)
+                if not res:
+                    log.error(err)
+            return
         return log.error("Command not found")
         
     def do_delete(self, line):
@@ -150,8 +177,9 @@ class cgxcmd(cmd.Cmd):
 
     def do_set(self, line):
         """change a property of an object
-        set interface_security_zone element <element_name> interface <interface_name> zone <zone_name>
-        set interface_security_zone element_file <element_file_name> interface <interface_name> zone <zone_name>
+        set interface_security_zone element "<element_name>" interface "<interface_name>" zone "<zone_name>"
+        set interface_security_zone element_file "<element_file_name>" interface "<interface_name>" zone "<zone_name>"
+        set snmpv3_agent element "<element name>" user_name "<user name>" security_level "<security level>" engine_id  "<engine id>" auth_phrase "<auth phrase>" auth_type "<auth type>" enc_phrase "<encryption phrase>" enc_type "<encryption type>"
         """
         
         # remove spaces
@@ -177,6 +205,30 @@ class cgxcmd(cmd.Cmd):
             for element in elements:
                 log.info(f"Working on element {element.strip()}")
                 res, err = cgxapi.set_interface_zone(element.strip(), interface, zone)
+                if not res:
+                    log.error(err)
+            return
+
+        m = re.search(r'snmpv3_agent element \"([^\"]+)\" user_name \"([^\"]+)\" security_level \"([^\"]+)\" engine_id \"([^\"]*)\" auth_phrase \"([^\"]*)\" auth_type \"([^\"]*)\" enc_phrase \"([^\"]*)\" enc_type \"([^\"]*)\"', clean_line)
+        if m:
+            element_re, user_name, security_level, engine_id, auth_phrase , auth_type, enc_phrase, enc_type= self.replace_knight(*m.groups())
+            elements = db.get_re("name2element", element_re)
+            for element in elements:
+                log.info(f"Working on element {element['name']}")
+                res, err = cgxapi.set_snmpv3_agent(element['name'], user_name, security_level, engine_id, auth_phrase , auth_type, enc_phrase, enc_type)
+                if not res:
+                    log.error(err)
+            return
+        m = re.search(r'snmpv3_agent element_file \"([^\"]+)\" user_name \"([^\"]+)\" security_level \"([^\"]+)\" engine_id \"([^\"]*)\" auth_phrase \"([^\"]*)\" auth_type \"([^\"]*)\" enc_phrase \"([^\"]*)\" enc_type \"([^\"]*)\"', clean_line)
+        if m:
+            element_file, user_name, security_level, engine_id, auth_phrase , auth_type, enc_phrase, enc_type= self.replace_knight(*m.groups())
+            elements, err = self.read_file(element_file)
+            if elements == False:
+                log.error(err)
+                return
+            for element in elements:
+                log.info(f"Working on element {element.strip()}")
+                res, err = cgxapi.set_snmpv3_agent(element['name'], user_name, security_level, engine_id, auth_phrase , auth_type, enc_phrase, enc_type)
                 if not res:
                     log.error(err)
             return
