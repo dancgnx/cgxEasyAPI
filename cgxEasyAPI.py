@@ -559,6 +559,82 @@ class cgxEasyAPI:
             return False, err
 
         return True, ""
+    def interface_add_subinterface(self, element_name, parent_interface_name, vlan, IP_Address, scope, description="", native_vlan=False, used_for="lan", type="static"):
+        """Add sub interface
+        :param element_name: The name of the ION device
+        :type element_name: str
+        :param parent_interface_name: The name of the parent interface where the subinterface is added to
+        :type interafce_name: str
+        :param vlan: VLAN ID
+        :type vlan: integer 1-4095
+        :param IP_Address: Sub interface IP address
+        :type str: ip/bit length notation
+        :param scope: is the scope global or local 
+        :type str: global/local
+        :param native_vlan: Is the subinterface is untagged. Default: false
+        :type boolean:
+        :param description: a short description of the port
+        :type str:
+        :return: Success, ErrMSG
+        :rtype Success: Boolean
+        :rtype ErrMSG: String
+        """
+        # shortcut
+        sdk = self.sdk
+
+        # get ION from cache and get interface list
+        element = db.fetch("name2element", element_name)
+        if not element:
+            return False, "Can't find element"
+        interfaces = self.get_interfaces(element['site_id'], element['id'])
+
+        # find interface name 
+        for interface in interfaces:
+            if interface['name'] == parent_interface_name:
+                break
+        else:
+            return False, "Can't find interface"
+        
+        # check if sub interface exists
+        for sub_interface in interfaces:
+            if sub_interface['name'] == f"{parent_interface_name}.{vlan}":
+                return False, "Sub interface already exists"
+
+        # create the sub interface
+        new_interface = {
+            "type":"subinterface",
+            "attached_lan_networks":None,"site_wan_interface_ids":None,"name":None,
+            "description":description,
+            "tags":None,"mac_address":None,"mtu":0,
+            "ethernet_port":{"full_duplex":False,"speed":0},"admin_up":True,"nat_address":None,"nat_port":0,"nat_zone_id":None,"nat_pools":None,
+            "used_for":used_for,
+            "bypass_pair":None,"bound_interfaces":None,
+            "sub_interface":{"vlan_id":vlan,"native_vlan":native_vlan},
+            "pppoe_config":None,"secondary_ip_configs":None,"static_arp_configs":None,"dhcp_relay":None,
+            "parent": interface['id'],
+            "network_context_id":None,"ipfixcollectorcontext_id":None,"ipfixfiltercontext_id":None,"service_link_config":None,
+            "scope":scope,
+            "devicemgmt_policysetstack_id":None,"directed_broadcast":False
+        }
+
+        if type == "static":
+            new_interface["ipv4_config"]={"dhcp_config":None,"dns_v4_config":None,"routes":None,"static_config":{"address":IP_Address},"type":"static"},
+        else:
+            new_interface["ipv4_config"]={"dhcp_config":None,"dns_v4_config":None,"routes":None,"static_config":None,"type":"dhcp"},
+
+        
+        res = sdk.post.interfaces(element['site_id'], element['id'], new_interface)
+        if not res:
+            err = f"--- Can't add sub interface: {sdk.pull_content_error(res)}"
+            if self.debug:
+                log.error(err)
+                jd_detailed(res)
+            return False, err
+
+        # refresh interfaces for the elemnt as we changed an attribute
+        self.build_interfaces_cache(element['site_id'], element['id'])
+
+        return True, ""
 if __name__ == "__main__":
     # init logging
     cloudgenix.api_logger.setLevel(logging.WARN)
