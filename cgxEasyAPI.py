@@ -12,11 +12,9 @@ log = logging.getLogger('cgxEasyAPI').addHandler(logging.NullHandler())
 # init db
 
 class cgxEasyAPI:
-    def __init__(self, sdk, debug=0):
-        self.sdk = sdk
-        self.debug = debug
-        self.interfaces = {} # interface cache
-        db.init(sdk)
+    def __init__(self, auth_token, debug=0, ssl_verify=True):
+        """ constrat easyAPI object
+        """
         # init logging
         cloudgenix.api_logger.setLevel(logging.WARN)
         logging.basicConfig(level=logging.INFO)
@@ -25,6 +23,19 @@ class cgxEasyAPI:
         logging.getLogger("cgxEasyAPI").setLevel(logging.INFO)
         global log
         log = logging.getLogger("cgxEasyAPI")
+
+        # init API
+        sdk = cloudgenix.API(ssl_verify=ssl_verify)
+        res = sdk.interactive.use_token(auth_token)
+        if not res:
+            log.critical("Can't Login. Check authtoken")
+            jd_detailed(res)
+            sys.exit()
+
+        self.sdk = sdk
+        self.debug = debug
+        self.interfaces = {} # interface cache
+        db.init(sdk)
     
     def build_interfaces_cache(self, site_id, element_id):
         """Build interfaces cache 
@@ -559,6 +570,49 @@ class cgxEasyAPI:
             return False, err
 
         return True, ""
+    def net_policy_add_global_prefix(self, prefix_name, prefixes, description=None, tags=[]):
+        """ add prefixes to network policy global prefixlist
+        :param prefix_name: The name of the prefix filter to add prefixes to, or to create if doesn't exists
+        :type prefix_name: str
+        :param prefixes: Prefixes in the form of ip/net_len. Example "10.2.3.0/8" or "13.6.8.5/32"
+        :type prefixes: list
+        :return: Success, ErrMSG
+        :rtype Success: Boolean
+        :rtype ErrMSG: String
+        """
+        # shortcut
+        sdk = self.sdk
+
+        # get a list of existing prefixlists. Maybe its alread exists
+        for prefix in sdk.get.networkpolicyglobalprefixes().cgx_content['items']:
+            if prefix['name'] == prefix_name:
+                # prefix found, add prefixes to the list
+                prefixes.extend(prefix['ipv4_prefixes'])
+                prefix['ipv4_prefixes'] = list(set(prefixes))
+                res = sdk.put.networkpolicyglobalprefixes(prefix['id'], prefix)
+                if not res:
+                    err = f"--- Failed to update global prefixlist: {sdk.pull_content_error(res)}"
+                    if self.debug:
+                        log.error(err)
+                        jd_detailed(res)
+                    return False, err
+                break
+        else:
+            # prefix not found, we need to create a new one
+            prefix = {
+                "name":prefix_name,
+                "tags":tags,
+                "ipv4_prefixes":prefixes,
+                "description": description
+            }
+            res = sdk.post.networkpolicyglobalprefixes(prefix)
+            if not res:
+                err = f"--- Failed to create global prefixlist: {sdk.pull_content_error(res)}"
+                if self.debug:
+                    log.error(err)
+                    jd_detailed(res)
+                return False, err
+        return True, ""
     def interface_add_subinterface(self, element_name, parent_interface_name, vlan, IP_Address, scope, description="", native_vlan=False, used_for="lan", type="static"):
         """Add sub interface
         :param element_name: The name of the ION device
@@ -656,14 +710,15 @@ if __name__ == "__main__":
     #db.init(sdk)
 
     #delete dhcp 
-    easy = cgxEasyAPI(sdk, debug=1)
+    easy = cgxEasyAPI(cloudgenix_settings.CLOUDGENIX_AUTH_TOKEN, debug=1)
     res, err = False, "Test"
     #res, err= easy.interface_dhcprelay_add("Dan 2k", "3", "10.2.3.4", source_interface_name = "2")
     #res, err = easy.dhcp_pool_add_option("Dan Home", "1.2.3.0/24", "", "option my_44 code 44 = text", 'option my_44 "as"')
     #res, err = easy.dhcp_pool_del_option("Dan Home", "1.2.3.0/24", "my_44")
-    res, err = easy.set_snmpv3_agent("Dan 2k", "dantest", "auth", "12423423423422", "kokoloko", "sha", None, "none")
+    #res, err = easy.set_snmpv3_agent("Dan 2k", "dantest", "auth", "12423423423422", "kokoloko", "sha", None, "none")
+    #res, err = easy.set_snmpv3_agent("Dan 2k", "dantest", "auth", "12423423423422", "kokoroko", "sha", None, "none")
+    #res, err = easy.set_snmpv3_agent("Ansh-Hub", "uSNMP", "auth", "12423423423422", "kokoroko", "sha", None, "none")
+    res,err = easy.net_policy_add_global_prefix("new2", ['172.16.0.0/12', '192.168.0.0/16', '10.0.0.0/8'])
     print(res, err)
-    res, err = easy.set_snmpv3_agent("Dan 2k", "dantest", "auth", "12423423423422", "kokoroko", "sha", None, "none")
-    print(res, err)
-    res, err = easy.set_snmpv3_agent("Ansh-Hub", "uSNMP", "auth", "12423423423422", "kokoroko", "sha", None, "none")
+    res,err = easy.net_policy_add_global_prefix("new2", ['1.1.1.1/32'])
     print(res, err)

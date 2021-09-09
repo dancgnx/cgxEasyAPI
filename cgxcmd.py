@@ -260,22 +260,9 @@ class cgxcmd(cmd.Cmd):
 
 if __name__ == "__main__":
     # init logging
-    cloudgenix.api_logger.setLevel(logging.WARN)
-    logging.basicConfig(level=logging.INFO)
-    logging.getLogger("requests").setLevel(logging.WARN)
-    logging.getLogger("urllib3").setLevel(logging.WARN)
-    logging.getLogger("cgxEasyAPI").setLevel(logging.INFO)
     log = logging.getLogger("cgxcmd")
 
-    # init API
-    sdk = cloudgenix.API()
-    res = sdk.interactive.use_token(cloudgenix_settings.CLOUDGENIX_AUTH_TOKEN)
-    if not res:
-        log.critical("Can't Login. Check authtoken")
-        jd_detailed(res)
-        sys.exit()
-
     # init cgxEasyAPI
-    cgxapi = cgxEasyAPI.cgxEasyAPI(sdk)
+    cgxapi = cgxEasyAPI.cgxEasyAPI(cloudgenix_settings.CLOUDGENIX_AUTH_TOKEN)
     cgxcmd().cmdloop()
 
