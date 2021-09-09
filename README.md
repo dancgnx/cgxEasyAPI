@@ -21,7 +21,7 @@ cgxapi = cgxEasyAPI.cgxEasyAPI(cloudgenix_settings.CLOUDGENIX_AUTH_TOKEN)
 All API functions are returning status (boolean) and error message (string). A typical call looks like the following:
 
 ```python
-res,err = easy.net_policy_add_global_prefix("new2", ['1.1.1.1/32'])
+res,err = cgxapi.net_policy_add_global_prefix("new2", ['1.1.1.1/32'])
 if not res:
     print(err)
     sys.exit()
