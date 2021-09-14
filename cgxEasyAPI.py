@@ -698,17 +698,6 @@ if __name__ == "__main__":
     logging.getLogger("cgxEasyAPI").setLevel(logging.INFO)
     log = logging.getLogger("TEST")
 
-    # init API
-    sdk = cloudgenix.API()
-    res = sdk.interactive.use_token(cloudgenix_settings.CLOUDGENIX_AUTH_TOKEN)
-    if not res:
-        log.critical("Can't Login. Check authtoken")
-        jd_detailed(res)
-        sys.exit()
-    
-    #init db
-    #db.init(sdk)
-
     #delete dhcp 
     easy = cgxEasyAPI(cloudgenix_settings.CLOUDGENIX_AUTH_TOKEN, debug=1)
     res, err = False, "Test"

@@ -139,7 +139,7 @@ class cgxcmd(cmd.Cmd):
             elements = db.get_re("name2element", element_re)
             for element in elements:
                 log.info(f"Working on element {element['name']}")
-                res, err = cgxapi.interface_tag_add(['name'], interface, tag)
+                res, err = cgxapi.interface_tag_add(element['name'], interface, tag)
                 if not res:
                     log.error(err)
             return
