@@ -1,4 +1,5 @@
 import cloudgenix
+import ipcalc
 from cloudgenix import jd, jd_detailed
 import cloudgenix_settings
 import logging
@@ -689,6 +690,91 @@ class cgxEasyAPI:
         self.build_interfaces_cache(element['site_id'], element['id'])
 
         return True, ""
+    def sec_policy_add_local_prefix(self, prefix_name, site_name, prefixes, description=None, tags=[]):
+        """ add prefixes to security policy local prefixlist
+        :param prefix_name: The name of the prefix filter to add prefixes to, or to create if doesn't exists
+        :type prefix_name: str
+        :param site_name: The name of the site to add prefix to, o create it if doesn't exists
+        :type prefix_name: str
+        :param prefixes: Prefixes in the form of ip/net_len. Example "10.2.3.0/8" or "13.6.8.5/32"
+        :type prefixes: list
+        :return: Success, ErrMSG
+        :rtype Success: Boolean
+        :rtype ErrMSG: String
+        """
+        # shortcut
+        sdk = self.sdk
+
+        # check if tags is a list
+        if not type(tags) is list:
+            return False, "tag paramter should be a list of strings"
+
+        # check if prefixes are valid
+        for prefix in prefixes:
+            try:
+                ipcalc.IP(prefix)
+            except ValueError:
+                return False,f"{prefix} is not a valid"
+
+        # get site info
+        site = db.fetch("name2site", site_name)
+        if not site:
+            return False, "Site not found"
+
+        # get a list of existing prefixlists. Maybe its alread exists
+        for prefix in sdk.get.ngfwsecuritypolicylocalprefixes().cgx_content['items']:
+            if prefix['name'] == prefix_name:
+                # prefix found, add prefixes to the list
+                break
+        else:
+            # prefix not found, we need to create a new one
+            prefix = {
+                "name":prefix_name,
+                "tags":tags,
+                "description": description
+            }
+            res = sdk.post.ngfwsecuritypolicylocalprefixes(prefix)
+            if not res:
+                err = f"--- Failed to local security prefixlist: {sdk.pull_content_error(res)}"
+                if self.debug:
+                    log.error(err)
+                    jd_detailed(res)
+                return False, err
+            prefix = res.cgx_content
+
+        prefix_id = prefix['id']
+
+        # get a list of site local prefixes. Maybe it already exists
+        for site_prefix in sdk.get.site_ngfwsecuritypolicylocalprefixes(site['id']).cgx_content['items']:
+            if site_prefix['prefix_id'] == prefix_id:
+                # local prefix found, add prefixes to the list
+                prefixes.extend(site_prefix['ipv4_prefixes'])
+                site_prefix['ipv4_prefixes'] = list(set(prefixes))
+                res = sdk.put.site_ngfwsecuritypolicylocalprefixes(site['id'], site_prefix['id'], site_prefix)
+                if not res:
+                    err = f"--- Failed to update local security prefixlist: {sdk.pull_content_error(res)}"
+                    if self.debug:
+                        log.error(err)
+                        jd_detailed(res)
+                    return False, err
+                break
+        else:
+            # local prefix not found, lets create one
+            local_prefix = {
+                    "ipv4_prefixes": prefixes,
+                    "prefix_id": prefix_id,
+                    "tags": tags
+                        
+                    }
+            res = sdk.post.site_ngfwsecuritypolicylocalprefixes(site['id'], local_prefix)
+            if not res:
+                err = f"--- Failed to create local security prefixlist: {sdk.pull_content_error(res)}"
+                if self.debug:
+                    log.error(err)
+                    jd_detailed(res)
+                return False, err
+        return True, ""
+    
 if __name__ == "__main__":
     # init logging
     cloudgenix.api_logger.setLevel(logging.WARN)
@@ -707,7 +793,7 @@ if __name__ == "__main__":
     #res, err = easy.set_snmpv3_agent("Dan 2k", "dantest", "auth", "12423423423422", "kokoloko", "sha", None, "none")
     #res, err = easy.set_snmpv3_agent("Dan 2k", "dantest", "auth", "12423423423422", "kokoroko", "sha", None, "none")
     #res, err = easy.set_snmpv3_agent("Ansh-Hub", "uSNMP", "auth", "12423423423422", "kokoroko", "sha", None, "none")
-    res,err = easy.net_policy_add_global_prefix("new2", ['172.16.0.0/12', '192.168.0.0/16', '10.0.0.0/8'])
+    res,err = easy.sec_policy_add_local_prefix("easy2", "Dan Home",['172.16.0.0/12', '192.168.0.0/16', '10.0.0.0/8'])
     print(res, err)
-    res,err = easy.net_policy_add_global_prefix("new2", ['1.1.1.1/32'])
+    res,err = easy.sec_policy_add_local_prefix("easy2","Dan Home",['172.16.0.0/12'])
     print(res, err)
