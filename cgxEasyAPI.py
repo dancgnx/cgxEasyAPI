@@ -775,6 +775,59 @@ class cgxEasyAPI:
                 return False, err
         return True, ""
     
+    def secure_fabric_add_tunnels(self, site1_name, site2_name):
+        """ create site to site tunnels across all avialble paths
+        :param site1_name: Site name 1
+        :type prefix_name: str
+        :param site2_name: Site name 2
+        :type prefix_name: str
+        :return: Success, ErrMSG
+        :rtype Success: Boolean
+        :rtype ErrMSG: String
+        """
+        # shortcut
+        sdk = self.sdk
+
+        # get siter1 info
+        site1 = db.fetch("name2site", site1_name)
+        if not site1:
+            return False, "Site1 not found"
+        # get siter2 info
+        site2 = db.fetch("name2site", site2_name)
+        if not site1:
+            return False, "Site1 not found"
+        
+        # get circuit labels for both sites
+        site1_waninterfaces = sdk.get.waninterfaces(site1['id']).cgx_content['items']
+        site2_waninterfaces = sdk.get.waninterfaces(site2['id']).cgx_content['items']
+
+        # create anynet links
+        for s1_waninterface in site1_waninterfaces:
+            for s2_waninterface in site2_waninterfaces:
+                # skip if trying to bring up private to public
+                if s1_waninterface['type'] != s2_waninterface['type']:
+                    continue
+                data = {
+                        "name":None, "description":None, "tags":None,
+                        "ep1_site_id":site1['id'],"ep1_wan_if_id":s1_waninterface['id'],
+                        "ep2_site_id":site2['id'],"ep2_wan_if_id":s2_waninterface['id'],
+                        "admin_up":True,"forced":True,"type":None,"vpnlink_configuration":None}
+                res = sdk.post.tenant_anynetlinks(data)
+                if not res:
+                    if res.status_code == 400:
+                        # link alraedy there
+                        if 'DUP_ANYNET' in res.text:
+                            if self.debug:
+                                log.info(f"VPN between {site1_name} {s1_waninterface['name']} and {site2_name} {s2_waninterface['name']} already exists. Continuing")
+                            continue
+                        else:
+                            pp(res.json())
+                            pp(s1_waninterface)
+                            pp(s2_waninterface)
+                        
+
+        return True, ""
+
 if __name__ == "__main__":
     # init logging
     cloudgenix.api_logger.setLevel(logging.WARN)
@@ -793,7 +846,9 @@ if __name__ == "__main__":
     #res, err = easy.set_snmpv3_agent("Dan 2k", "dantest", "auth", "12423423423422", "kokoloko", "sha", None, "none")
     #res, err = easy.set_snmpv3_agent("Dan 2k", "dantest", "auth", "12423423423422", "kokoroko", "sha", None, "none")
     #res, err = easy.set_snmpv3_agent("Ansh-Hub", "uSNMP", "auth", "12423423423422", "kokoroko", "sha", None, "none")
-    res,err = easy.sec_policy_add_local_prefix("easy2", "Dan Home",['172.16.0.0/12', '192.168.0.0/16', '10.0.0.0/8'])
-    print(res, err)
-    res,err = easy.sec_policy_add_local_prefix("easy2","Dan Home",['172.16.0.0/12'])
-    print(res, err)
+    #res,err = easy.sec_policy_add_local_prefix("easy2", "Dan Home",['172.16.0.0/12', '192.168.0.0/16', '10.0.0.0/8'])
+    #print(res, err)
+    #res,err = easy.sec_policy_add_local_prefix("easy2","Dan Home",['172.16.0.0/12'])
+    #print(res, err)
+    res,err = easy.secure_fabric_add_tunnels("PanDan - Branch", "1Dmitry-Branch-Rancho")
+    print(res,err)
